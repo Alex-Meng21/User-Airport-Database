@@ -12,6 +12,7 @@
 import sqlite3
 from p2app.events import*
 from p2app.events.continents import Continent
+from p2app.events.countries import Country
 class Engine:
     """An object that represents the application's engine, whose main role is to
     process events sent to it by the user interface, then generate events that are
@@ -37,26 +38,28 @@ class Engine:
         if isinstance(event, OpenDatabaseEvent):
 
             self.connection = sqlite3.connect(event.path())
+            self.connection.execute('PRAGMA foreign_keys = ON')
             yield DatabaseOpenedEvent(event.path())
 
-
-        if isinstance(event, StartContinentSearchEvent): #Continent related events
+        # Continent related events
+        if isinstance(event, StartContinentSearchEvent):
             try:
 
                 cursor = self.connection.cursor()
-                cursor.execute('SELECT * FROM continent WHERE continent_code =? OR name=?',
-                               (event.continent_code(),event.name()))
+                cursor.execute('SELECT * FROM continent WHERE (continent_code =? AND name=?) OR continent_code =? OR name =?',
+                               (event.continent_code(),event.name(),event.continent_code(),event.name()))
                 rows = cursor.fetchall()
                 for row in rows:
-                    if (row[1] == event.continent_code() and row[2] == event.name()) or (row[1] == event.continent_code() and row[2] == 'None') or (row[2] == event.name() and row[1] == 'None'):
-                        #right now doesn't yield anything if only code or name is entered alone
+                    if (row[1] == event.continent_code() and event.name() == None) or (row[2] == event.name() and event.continent_code() == None) or (row[1] == event.continent_code() and row[2] == event.name()):
+
                         yield ContinentSearchResultEvent(
                             Continent(row[0], row[1], row[2]))
-                        cursor.close()
+                cursor.close()
+
             except sqlite3.Error:
                 yield DatabaseOpenFailedEvent('File is not a database')
-            except Exception:
-                yield ErrorEvent('Error searching continent. Continent may not exis')
+            except:
+                yield ErrorEvent('Error searching continent. Continent may not exist')
 
         if isinstance(event, LoadContinentEvent):
             try:
@@ -72,13 +75,18 @@ class Engine:
 
         if isinstance(event, SaveNewContinentEvent):
             try:
+
                 cursor3 = self.connection.cursor()
-                cursor3.execute(
-                    'INSERT INTO continent(continent_code, name) VALUES (?,?);',
-                    (event.continent().continent_code, event.continent().name))
-                yield ContinentSavedEvent(Continent(event.continent().continent_id, event.continent().continent_code, event.continent().name))
-                self.connection.commit()
-                cursor3.close()
+                if (event.continent().continent_code != '') and (event.continent().name != ''):
+
+                    cursor3.execute(
+                        'INSERT INTO continent(continent_code, name) VALUES (?,?);',
+                        (event.continent().continent_code, event.continent().name))
+                    yield ContinentSavedEvent(Continent(event.continent().continent_id, event.continent().continent_code, event.continent().name))
+                    self.connection.commit()
+                    cursor3.close()
+                else:
+                    yield SaveContinentFailedEvent('Empty code and/or name')
             except sqlite3.Error:
                 yield SaveContinentFailedEvent(f'Continent failed to save {event.continent().continent_code} is already in the database' )
 
@@ -86,12 +94,15 @@ class Engine:
 
             try:
                 cursor4 = self.connection.cursor()
-                cursor4.execute(
-                    'UPDATE continent SET continent_code=?, name=? WHERE continent_id=?;',
-                    (event.continent().continent_code, event.continent().name, event.continent().continent_id))
-                yield ContinentSavedEvent(Continent(event.continent().continent_id, event.continent().continent_code, event.continent().name))
-                self.connection.commit()
-                cursor4.close()
+                if (event.continent().continent_code != '') and (event.continent().name != ''):
+                    cursor4.execute(
+                        'UPDATE continent SET continent_code=?, name=? WHERE continent_id=?;',
+                        (event.continent().continent_code, event.continent().name, event.continent().continent_id))
+                    yield ContinentSavedEvent(Continent(event.continent().continent_id, event.continent().continent_code, event.continent().name))
+                    self.connection.commit()
+                    cursor4.close()
+                else:
+                    yield SaveContinentFailedEvent('Empty code and/or name')
             except sqlite3.Error:
                 yield SaveContinentFailedEvent(f'Continent failed to save {event.continent().continent_code} is already in the database' )
 
@@ -104,3 +115,37 @@ class Engine:
 
         if isinstance(event, QuitInitiatedEvent):
             yield EndApplicationEvent()
+
+#country related events
+
+        if isinstance(event, StartCountrySearchEvent):
+            try:
+                cursor5 = self.connection.cursor()
+                cursor5.execute('SELECT * FROM country WHERE (country_code =? AND name=?) OR country_code =? OR name =?',
+                               (event.country_code(),event.name(),event.country_code(),event.name()))
+                rows = cursor5.fetchall()
+                for row in rows:
+                    if (row[1] == event.country_code() and event.name() == None) or (
+                            row[2] == event.name() and event.country_code() == None) or (
+                            row[1] == event.country_code() and row[2] == event.name()):
+                        yield CountrySearchResultEvent(
+                            Country(row[0], row[1], row[2],row[3],row[4],row[5]))
+                cursor5.close()
+            except sqlite3.Error:
+                yield DatabaseOpenFailedEvent('File is not a database')
+            except:
+                yield ErrorEvent('Error searching continent. Continent may not exist')
+
+        if isinstance(event, LoadCountryEvent):
+
+            try:
+                cursor6 = self.connection.cursor()
+                cursor6.execute('SELECT * FROM country WHERE country_id = ?',
+                                (event.country_id(),))
+                row = cursor6.fetchone()
+                yield CountryLoadedEvent(Country(row[0],row[1], row[2],row[3],row[4],row[5]))
+                cursor6.close()
+
+            except sqlite3.Error:
+                yield ErrorEvent('Error loading continent')
+
