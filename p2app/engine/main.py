@@ -34,7 +34,7 @@ class Engine:
         # writing your engine, but this at least allows the program to run.
 
 
-
+        #Application open event
         if isinstance(event, OpenDatabaseEvent):
 
             self.connection = sqlite3.connect(event.path())
@@ -154,7 +154,7 @@ class Engine:
             try:
 
                 cursor7 = self.connection.cursor()
-                if (event.country().country_code != '') and (event.country().name != '') and (event.country().wikipedia_link != '') and (event.country().continent_id != 0):
+                if (event.country().country_code != '') and (event.country().name != '') and (event.country().wikipedia_link != '') and (event.country().continent_id != ''):
 
                     cursor7.execute(
                         'INSERT INTO country(country_code, name, continent_id, wikipedia_link, keywords) VALUES (?,?,?,?,?);',
@@ -164,7 +164,7 @@ class Engine:
                                   event.country().continent_id, event.country().wikipedia_link, event.country().keywords))
                     self.connection.commit()
                     cursor7.close()
-                if event.country().continent_id == 0:
+                elif event.country().continent_id == 0:
                     yield SaveCountryFailedEvent('Continent ID cannot be 0!')
                 else:
                     yield SaveCountryFailedEvent('Empty code, name, continent id, or wikipedia link')
@@ -172,3 +172,23 @@ class Engine:
                 yield SaveCountryFailedEvent(
                     f'Country failed to save! {event.country().country_code} is already in the database')
 
+        if isinstance(event, SaveCountryEvent):
+            try:
+                cursor8 = self.connection.cursor()
+                if (event.country().country_code != '') and (event.country().name != '') and (event.country().continent_id != ''
+                    ) and (event.country().wikipedia_link != ''):
+                    cursor8.execute(
+                        'UPDATE country SET country_code=?, name=?, continent_id =?, wikipedia_link=?, keywords=? WHERE country_id=?;',
+                        (event.country().country_code, event.country().name, event.country().continent_id, event.country().wikipedia_link,
+                         event.country().keywords,event.country().country_id))
+
+                    yield CountrySavedEvent(Country(event.country().country_id, event.country().country_code, event.country().name,
+                                                      event.country().continent_id, event.country().wikipedia_link, event.country().keywords))
+                    self.connection.commit()
+                    cursor8.close()
+                elif event.country().continent_id == 0:
+                    yield SaveCountryFailedEvent('Continent ID cannot be 0!')
+                else:
+                    yield SaveCountryFailedEvent('Empty code, name, continent_id, or wikipedia link')
+            except sqlite3.Error:
+                yield SaveCountryFailedEvent(f'Continent failed to save {event.country().country_code} is already in the database' )
