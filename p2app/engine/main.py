@@ -149,3 +149,26 @@ class Engine:
             except sqlite3.Error:
                 yield ErrorEvent('Error loading continent')
 
+        if isinstance(event, SaveNewCountryEvent):
+
+            try:
+
+                cursor7 = self.connection.cursor()
+                if (event.country().country_code != '') and (event.country().name != '') and (event.country().wikipedia_link != '') and (event.country().continent_id != 0):
+
+                    cursor7.execute(
+                        'INSERT INTO country(country_code, name, continent_id, wikipedia_link, keywords) VALUES (?,?,?,?,?);',
+                        (event.country().country_code, event.country().name, event.country().continent_id, event.country().wikipedia_link, event.country().keywords))
+                    yield CountrySavedEvent(
+                        Country(event.country().country_id, event.country().country_code, event.country().name,
+                                  event.country().continent_id, event.country().wikipedia_link, event.country().keywords))
+                    self.connection.commit()
+                    cursor7.close()
+                if event.country().continent_id == 0:
+                    yield SaveCountryFailedEvent('Continent ID cannot be 0!')
+                else:
+                    yield SaveCountryFailedEvent('Empty code, name, continent id, or wikipedia link')
+            except sqlite3.Error:
+                yield SaveCountryFailedEvent(
+                    f'Country failed to save! {event.country().country_code} is already in the database')
+
