@@ -86,10 +86,14 @@ class Engine:
 
             try:
                 cursor4 = self.connection.cursor()
-                cursor4.execute('UPDATE continent SET (continent_code = ?, name = ?)'
-                    )
-            except:
-                pass
+                cursor4.execute(
+                    'UPDATE continent SET continent_code=?, name=? WHERE continent_id=?;',
+                    (event.continent().continent_code, event.continent().name, event.continent().continent_id))
+                yield ContinentSavedEvent(Continent(event.continent().continent_id, event.continent().continent_code, event.continent().name))
+                self.connection.commit()
+                cursor4.close()
+            except sqlite3.Error:
+                yield SaveContinentFailedEvent(f'Continent failed to save {event.continent().continent_code} is already in the database' )
 
 
         if isinstance(event, CloseDatabaseEvent):
