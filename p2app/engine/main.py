@@ -65,13 +65,13 @@ class Engine:
         if isinstance(event, LoadContinentEvent):
             try:
                 cursor2 = self.connection.cursor()
-                cursor2.execute('SELECT * FROM continent WHERE continent_id = ?',
+                cursor2.execute('SELECT continent_code, name FROM continent WHERE continent_id = ?',
                                 (event.continent_id(),))
                 row = cursor2.fetchone()
-                yield ContinentLoadedEvent(Continent(row[0],row[1],row[2]))
+                yield ContinentLoadedEvent(Continent(event.continent_id(),row[0],row[1]))
                 cursor2.close()
 
-            except sqlite3.Error:
+            except:
                 yield ErrorEvent('Error loading continent')
 
         if isinstance(event, SaveNewContinentEvent):
@@ -144,14 +144,14 @@ class Engine:
 
             try:
                 cursor6 = self.connection.cursor()
-                cursor6.execute('SELECT * FROM country WHERE country_id = ?',
+                cursor6.execute('SELECT country_code, name, continent_id, wikipedia_link, keywords FROM country WHERE country_id = ?',
                                 (event.country_id(),))
                 row = cursor6.fetchone()
-                yield CountryLoadedEvent(Country(row[0],row[1], row[2],row[3],row[4],row[5]))
+                yield CountryLoadedEvent(Country(event.country_id(),row[0], row[1],row[2],row[3],row[4]))
                 cursor6.close()
 
-            except sqlite3.Error:
-                yield ErrorEvent('Error loading continent')
+            except:
+                yield ErrorEvent('Error loading country')
 
         if isinstance(event, SaveNewCountryEvent):
 
@@ -194,8 +194,8 @@ class Engine:
                                                       event.country().continent_id, event.country().wikipedia_link, event.country().keywords))
                     self.connection.commit()
                     cursor8.close()
-                elif event.country().continent_id == 0:
-                    yield SaveCountryFailedEvent('Continent ID cannot be 0!')
+                elif (event.country().continent_id == 0) or (event.country().continent_id ==''):
+                    yield SaveCountryFailedEvent('Continent ID cannot be 0 or empty!')
                 else:
                     yield SaveCountryFailedEvent('Empty code, name, continent_id, or wikipedia link')
             except sqlite3.Error:
@@ -228,3 +228,57 @@ class Engine:
 
             except:
                 yield ErrorEvent('Encountered Error while searching for region')
+
+
+        if isinstance(event, LoadRegionEvent):
+
+            try:
+                cursor10 = self.connection.cursor()
+                cursor10.execute('SELECT region_code, local_code, name, continent_id, country_id, wikipedia_link, keywords FROM region WHERE region_id = ?',
+                                (event.region_id(),))
+                row = cursor10.fetchone()
+                yield RegionLoadedEvent(Region(event.region_id(),row[0], row[1],row[2],row[3],row[4],row[5],row[6]))
+                cursor10.close()
+
+            except:
+                yield ErrorEvent('Error loading continent')
+
+        if isinstance(event, SaveNewRegionEvent):
+
+            try:
+
+                cursor11 = self.connection.cursor()
+                if (event.region().region_code != '') and (event.region().name != '') and (
+                    event.region().local_code != '') and (event.region().continent_id != '') and (
+                    event.region().country_id != ''
+                ):
+                    cursor11.execute(
+                        'INSERT INTO region (region_code, local_code, name, continent_id, country_id, wikipedia_link, keywords) VALUES (?,?,?,?,?,?,?);',
+                        (event.region().region_code, event.region().local_code, event.region().name, event.region().continent_id, event.region().country_id,
+                         event.region().wikipedia_link, event.region().keywords))
+
+                    yield RegionSavedEvent(
+                        Region(event.region().region_id, event.region().region_code, event.region().local_code,
+                               event.region().name, event.region().continent_id, event.region().country_id,
+                               event.region().wikipedia_link, event.region().keywords))
+                    self.connection.commit()
+                    cursor11.close()
+
+                elif (event.region().continent_id == 0) or (event.region().continent_id == ''):
+                    yield SaveRegionFailedEvent('Continent ID cannot be 0 or empty!')
+                elif (event.region().country_id == 0) or (event.region().country_id == ''):
+                    yield SaveRegionFailedEvent('Country ID cannot be 0 or empty!')
+                else:
+                    yield SaveRegionFailedEvent('Empty region code, name, local code, continent id, or country id')
+
+            except sqlite3.IntegrityError as e:
+                if "UNIQUE constraint failed" in str(e):
+                    yield SaveCountryFailedEvent(
+                        f'Country failed to save! {event.region().region_code} is already in the database')
+            except sqlite3.DatabaseError:
+                yield DatabaseOpenFailedEvent('File is not a database')
+
+
+        if isinstance(event, SaveRegionEvent):
+            pass
+
