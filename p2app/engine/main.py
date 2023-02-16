@@ -107,8 +107,12 @@ class Engine:
                     cursor4.close()
                 else:
                     yield SaveContinentFailedEvent('Empty code and/or name')
+            except sqlite3.IntegrityError as e:
+                if "UNIQUE constraint failed" in str(e):
+                    yield SaveContinentFailedEvent(
+                            f'Continent failed to save {event.continent().continent_code} is already in the database')
             except sqlite3.Error:
-                yield SaveContinentFailedEvent(f'Continent failed to save {event.continent().continent_code} is already in the database' )
+                yield SaveContinentFailedEvent('Error: Continent failed to save')
 
 #closing and quiting the application
         if isinstance(event, CloseDatabaseEvent):
@@ -168,8 +172,8 @@ class Engine:
                                   event.country().continent_id, event.country().wikipedia_link, event.country().keywords))
                     self.connection.commit()
                     cursor7.close()
-                elif event.country().continent_id == 0:
-                    yield SaveCountryFailedEvent('Continent ID cannot be 0!')
+                elif event.country().continent_id == 0 or event.country().country_id == '':
+                    yield SaveCountryFailedEvent('Continent ID cannot be 0 or empty!')
                 else:
                     yield SaveCountryFailedEvent('Empty code, name, continent id, or wikipedia link')
 
@@ -194,12 +198,14 @@ class Engine:
                                                       event.country().continent_id, event.country().wikipedia_link, event.country().keywords))
                     self.connection.commit()
                     cursor8.close()
-                elif (event.country().continent_id == 0) or (event.country().continent_id ==''):
-                    yield SaveCountryFailedEvent('Continent ID cannot be 0 or empty!')
+
                 else:
                     yield SaveCountryFailedEvent('Empty code, name, continent_id, or wikipedia link')
+            except sqlite3.IntegrityError as e:
+                if "UNIQUE constraint failed" in str(e):
+                    yield SaveCountryFailedEvent(f'Country failed to save {event.country().country_code} is already in the database' )
             except sqlite3.Error:
-                yield SaveCountryFailedEvent(f'Country failed to save {event.country().country_code} is already in the database' )
+                yield SaveCountryFailedEvent('Error: Country failed to save')
 
 #region related events
 
@@ -273,12 +279,31 @@ class Engine:
 
             except sqlite3.IntegrityError as e:
                 if "UNIQUE constraint failed" in str(e):
-                    yield SaveCountryFailedEvent(
+                    yield SaveRegionFailedEvent(
                         f'Country failed to save! {event.region().region_code} is already in the database')
             except sqlite3.DatabaseError:
                 yield DatabaseOpenFailedEvent('File is not a database')
 
 
         if isinstance(event, SaveRegionEvent):
-            pass
+            try:
+                cursor12 = self.connection.cursor()
+                if (event.region().region_code != '') and (event.region().name != '') and (event.region().local_code != ''
+                    ) and (event.region().continent_id != '') and (event.region().country_id != ''):
+                    cursor12.execute(
+                        'UPDATE region SET region_code=?, local_code=?, name=?, continent_id =?, country_id=?, wikipedia_link=?, keywords=? WHERE region_id=?;',
+                        (event.region().region_code, event.region().local_code, event.region().name, event.region().continent_id, event.region().country_id,
+                         event.region().wikipedia_link, event.region().keywords, event.region().region_id))
+
+                    yield RegionSavedEvent(Region(event.region().region_id, event.region().region_code, event.region().local_code, event.region().name,
+                                                  event.region().continent_id, event.region().country_id, event.region().wikipedia_link, event.region().keywords))
+                    self.connection.commit()
+                    cursor12.close()
+                else:
+                    yield SaveRegionFailedEvent('Empty code, name, continent_id, or wikipedia link')
+            except sqlite3.IntegrityError as e:
+                if "UNIQUE constraint failed" in str(e):
+                    yield SaveRegionFailedEvent(f'Region failed to save {event.region().region_code} is already in the database' )
+            except sqlite3.Error:
+                yield SaveRegionFailedEvent('Error: Region failed to save')
 
