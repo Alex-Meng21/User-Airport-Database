@@ -13,6 +13,7 @@ import sqlite3
 from p2app.events import*
 from p2app.events.continents import Continent
 from p2app.events.countries import Country
+from p2app.events.regions import Region
 class Engine:
     """An object that represents the application's engine, whose main role is to
     process events sent to it by the user interface, then generate events that are
@@ -56,7 +57,7 @@ class Engine:
                             Continent(row[0], row[1], row[2]))
                 cursor.close()
 
-            except sqlite3.Error:
+            except sqlite3.DatabaseError:
                 yield DatabaseOpenFailedEvent('File is not a database')
             except:
                 yield ErrorEvent('Error searching continent. Continent may not exist')
@@ -87,8 +88,11 @@ class Engine:
                     cursor3.close()
                 else:
                     yield SaveContinentFailedEvent('Empty code and/or name')
-            except sqlite3.Error:
-                yield SaveContinentFailedEvent(f'Continent failed to save {event.continent().continent_code} is already in the database' )
+            except sqlite3.IntegrityError as e:
+                if "UNIQUE constraint failed" in str(e):
+                    yield SaveContinentFailedEvent(f'Continent failed to save {event.continent().continent_code} is already in the database' )
+            except sqlite3.DatabaseError:
+                yield DatabaseOpenFailedEvent('File is not a database')
 
         if isinstance(event, SaveContinentEvent):
 
@@ -106,7 +110,7 @@ class Engine:
             except sqlite3.Error:
                 yield SaveContinentFailedEvent(f'Continent failed to save {event.continent().continent_code} is already in the database' )
 
-
+#closing and quiting the application
         if isinstance(event, CloseDatabaseEvent):
             if self.connection is not None:
                 self.connection.close()
@@ -131,10 +135,10 @@ class Engine:
                         yield CountrySearchResultEvent(
                             Country(row[0], row[1], row[2],row[3],row[4],row[5]))
                 cursor5.close()
-            except sqlite3.Error:
+            except sqlite3.DatabaseError:
                 yield DatabaseOpenFailedEvent('File is not a database')
             except:
-                yield ErrorEvent('Error searching continent. Continent may not exist')
+                yield ErrorEvent('Encountered error while searching for country')
 
         if isinstance(event, LoadCountryEvent):
 
@@ -168,9 +172,13 @@ class Engine:
                     yield SaveCountryFailedEvent('Continent ID cannot be 0!')
                 else:
                     yield SaveCountryFailedEvent('Empty code, name, continent id, or wikipedia link')
-            except sqlite3.Error:
-                yield SaveCountryFailedEvent(
-                    f'Country failed to save! {event.country().country_code} is already in the database')
+
+            except sqlite3.IntegrityError as e:
+                if "UNIQUE constraint failed" in str(e):
+                    yield SaveCountryFailedEvent(
+                        f'Country failed to save! {event.country().country_code} is already in the database')
+            except sqlite3.DatabaseError:
+                yield DatabaseOpenFailedEvent('File is not a database')
 
         if isinstance(event, SaveCountryEvent):
             try:
@@ -191,4 +199,32 @@ class Engine:
                 else:
                     yield SaveCountryFailedEvent('Empty code, name, continent_id, or wikipedia link')
             except sqlite3.Error:
-                yield SaveCountryFailedEvent(f'Continent failed to save {event.country().country_code} is already in the database' )
+                yield SaveCountryFailedEvent(f'Country failed to save {event.country().country_code} is already in the database' )
+
+#region related events
+
+        if isinstance(event, StartRegionSearchEvent):
+            try:
+                cursor9 = self.connection.cursor()
+                cursor9.execute(
+                    'SELECT * FROM region WHERE (region_code = ? AND local_code = ? AND name = ?) OR region_code =? OR local_code =? OR name =?',
+                    (event.region_code(), event.local_code(), event.name(), event.region_code(), event.local_code(), event.name()))
+                rows = cursor9.fetchall()
+                for row in rows:
+                    if (row[1] == event.region_code() and row[2] == event.local_code() and event.name() == None) or (
+                        row[3] == event.name() and event.local_code() == row[2] and event.region_code() == None) or (
+                        row[1] == event.region_code() and row[3] == event.name() and row[2] == event.local_code()) or (
+                        row[1] == event.region_code() and row[3] == event.name() and event.local_code() == None) or (
+                        row[1] == event.region_code() and event.name() == None and event.local_code() == None) or (
+                        row[3] == event.name() and event.region_code() == None and event.local_code() == None) or (
+                        row[2] == event.local_code() and event.region_code() == None and event.name() == None
+                    ):
+                        yield RegionSearchResultEvent(
+                            Region(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]))
+                cursor9.close()
+            except sqlite3.Error:
+
+                yield DatabaseOpenFailedEvent('File is not a database')
+
+            except:
+                yield ErrorEvent('Encountered Error while searching for region')
